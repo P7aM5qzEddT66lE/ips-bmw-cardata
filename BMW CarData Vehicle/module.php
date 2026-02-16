@@ -20,11 +20,24 @@ class BMWCarDataVehicle extends IPSModuleStrict {
         $this->RegisterAttributeString("telematicData", null);
 
         $this->RegisterTimer('update', 0, "BMW_getTelematicData($this->InstanceID);");
-        $this->ConnectParent("{C23F025F-A4CE-7F31-CE14-0AE225778FE7}");
+        #$this->ConnectParent("{C23F025F-A4CE-7F31-CE14-0AE225778FE7}");
     }
 
+    
     public function ApplyChanges(): void {
         parent::ApplyChanges();
+
+        // Verbinde mit dem Communicator Parent, falls noch nicht verbunden
+        $parentID = IPS_GetParent($this->InstanceID);
+        if ($parentID === 0) {
+            // Suche nach kompatiblem Communicator
+            $communicatorGUID = "{C23F025F-A4CE-7F31-CE14-0AE225778FE7}";
+            $instances = IPS_GetInstanceListByModuleID($communicatorGUID);
+            if (count($instances) > 0) {
+                // Verbinde mit dem ersten gefundenen Communicator
+                IPS_ConnectInstance($this->InstanceID, $instances[0]);
+            }
+        }
 
         // set the update timer according to the settings
         if ($this->ReadPropertyBoolean("update")) {
@@ -33,6 +46,17 @@ class BMWCarDataVehicle extends IPSModuleStrict {
         } else {
             $this->SetTimerInterval("update", 0);
         }
+    }
+    
+    public function GetCompatibleParents(): string {
+        return json_encode([
+            "type" => "connect",
+            "modules" => [
+                [
+                    "moduleID" => "{C23F025F-A4CE-7F31-CE14-0AE225778FE7}"
+                ]
+            ]
+        ]);
     }
 
     /**
@@ -83,7 +107,7 @@ class BMWCarDataVehicle extends IPSModuleStrict {
      * @return array
      */
     public function getBasicData(): array {
-        $response = $this->SendDataToParent(json_encode([
+        $response = @$this->SendDataToParent(json_encode([
                 "DataID" => DEVICE_TX,
                 "method" => "GET",
                 "accept" => "application/json",
@@ -91,8 +115,13 @@ class BMWCarDataVehicle extends IPSModuleStrict {
                 "body" => ""
             ]
         ));
+        
+        if ($response === false || $response === null) {
+            return [];
+        }
+        
         $this->WriteAttributeString("basicData", $response);
-        return json_decode($response, true);
+        return json_decode($response, true) ?? [];
     }
 
     /**
@@ -103,14 +132,16 @@ class BMWCarDataVehicle extends IPSModuleStrict {
      * @return array
      */
     public function getChargingHistory(string $from, string $to): array {
-        return json_decode($this->SendDataToParent(json_encode([
+        $response = $this->SendDataToParent(json_encode([
                 "DataID" => DEVICE_TX,
                 "method" => "GET",
                 "accept" => "application/json",
                 "endpoint" => "/customers/vehicles/" . $this->ReadPropertyString("vin") . "/chargingHistory?from=" . $from . "&to=" . $to,
                 "body" => ""
             ]
-        )), true);
+        ));
+        
+        return json_decode($response, true) ?? [];
     }
 
     /**
@@ -125,7 +156,7 @@ class BMWCarDataVehicle extends IPSModuleStrict {
             $path = dirname(__DIR__) . "/BMW CarData Vehicle/" . $this->ReadPropertyString("vin") . ".png";
         }
 
-        $response = $this->SendDataToParent(json_encode([
+        $response = @$this->SendDataToParent(json_encode([
                 "DataID" => DEVICE_TX,
                 "method" => "GET",
                 "accept" => "*/*",
@@ -151,14 +182,16 @@ class BMWCarDataVehicle extends IPSModuleStrict {
      * @return array
      */
     public function getLocationBasedSettings(): array {
-        return json_decode($this->SendDataToParent(json_encode([
+        $response = $this->SendDataToParent(json_encode([
                 "DataID" => DEVICE_TX,
                 "method" => "GET",
                 "accept" => "application/json",
                 "endpoint" => "/customers/vehicles/" . $this->ReadPropertyString("vin") . "/locationBasedChargingSettings",
                 "body" => ""
             ]
-        )), true);
+        ));
+        
+        return json_decode($response, true) ?? [];
     }
 
     /**
@@ -167,7 +200,7 @@ class BMWCarDataVehicle extends IPSModuleStrict {
      * @return array        Telematic Data
      */
     public function getTelematicData(): array {
-        $response = $this->SendDataToParent(json_encode([
+        $response = @$this->SendDataToParent(json_encode([
                 "DataID" => DEVICE_TX,
                 "method" => "GET",
                 "accept" => "application/json",
@@ -177,17 +210,22 @@ class BMWCarDataVehicle extends IPSModuleStrict {
             ]
         ));
 
+        if ($response === false || $response === null) {
+            return [];
+        }
+
         // update variables
         $data = json_decode($response, true);
         if (isset($data["telematicData"])) {
             $telematicData = $data["telematicData"];
-            $variables = json_decode($this->ReadAttributeString("variables"), true);
+            $variables = json_decode($this->ReadAttributeString("variables"), true) ?? [];
             foreach ($variables as $key => $value) {
-                $value = $telematicData[$key]["value"];
-                $ident = str_replace(".", "", $key);
-                $this->SetValue($ident, $value);
+                if (isset($telematicData[$key])) {
+                    $value = $telematicData[$key]["value"];
+                    $ident = str_replace(".", "", $key);
+                    $this->SetValue($ident, $value);
+                }
             }
-
 
             $this->WriteAttributeString("telematicData", json_encode($telematicData));
             return $telematicData;
@@ -201,28 +239,30 @@ class BMWCarDataVehicle extends IPSModuleStrict {
         if ($this->ReadAttributeString("basicData") == null || $this->ReadAttributeString("telematicData") == null) {
             $this->getBasicData();
             $this->getImage();
-            $response = $this->getTelematicData();
-            // catch gateway or init error
-            if ($response == []) return "";
+            $this->getTelematicData();
+            // continue even if response is empty
         }
 
-        // pre set data
-        $basicData = json_decode($this->ReadAttributeString("basicData"), true);
-        $image = $this->ReadAttributeString("image");
-        $variables = json_decode($this->ReadAttributeString("variables"), true);
+        // pre set data - mit Fallback auf leere Arrays
+        $basicData = json_decode($this->ReadAttributeString("basicData"), true) ?? ["brand" => "", "modelName" => "", "driveTrain" => "", "simStatus" => "", "constructionDate" => ""];
+        $image = $this->ReadAttributeString("image") ?? "";
+        $variables = json_decode($this->ReadAttributeString("variables"), true) ?? [];
 
         // try to show available telematics to add for variables
         $values = [];
         try {
-            foreach (json_decode($this->ReadAttributeString("telematicData"), true) as $key => $value) {
-                if ($value["value"] == null) continue;
-                $values[] = [
-                    "key" => $key,
-                    "value" => $value["value"],
-                    "unit" => $value["unit"] == null ? "" : $value["unit"],
-                    "variable" => isset($variables[$key]),
-                    "rowColor" => isset($variables[$key]) ? "#c0ffc0" : ""
-                ];
+            $telematicData = json_decode($this->ReadAttributeString("telematicData"), true);
+            if ($telematicData && is_array($telematicData)) {
+                foreach ($telematicData as $key => $value) {
+                    if ($value["value"] == null) continue;
+                    $values[] = [
+                        "key" => $key,
+                        "value" => $value["value"],
+                        "unit" => $value["unit"] == null ? "" : $value["unit"],
+                        "variable" => isset($variables[$key]),
+                        "rowColor" => isset($variables[$key]) ? "#c0ffc0" : ""
+                    ];
+                }
             }
         } catch (Exception $exception) {}
 
@@ -290,7 +330,7 @@ class BMWCarDataVehicle extends IPSModuleStrict {
                 ],
                 [
                     "type" => "ExpansionPanel",
-                    "caption" => "🔄 Automatic updates",
+                    "caption" => "?? Automatic updates",
                     "items" => [
                         [
                             "type" => "Label",
