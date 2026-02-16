@@ -20,7 +20,27 @@ class BMWCarDataVehicle extends IPSModuleStrict {
         $this->RegisterAttributeString("telematicData", null);
 
         $this->RegisterTimer('update', 0, "BMW_getTelematicData($this->InstanceID);");
-        $this->ConnectParent("{C23F025F-A4CE-7F31-CE14-0AE225778FE7}");
+
+        $parentGUID = "{C23F025F-A4CE-7F31-CE14-0AE225778FE7}";
+        $version = floatval(IPS_GetKernelVersion());
+        if ($version <= 8.1) {
+            $this->ConnectParent($parentGUID);
+        } else {
+            $instances = IPS_GetInstanceListByModuleID($parentGUID);
+            if (count($instances) > 0) {
+                IPS_ConnectInstance($this->InstanceID, $instances[0]);
+            }
+        }
+    }
+
+    /**
+     * Needed core function to provide parent in version >= 8.2
+     * @return string
+     */
+    public function GetCompatibleParents(): string {
+        return json_encode([
+            "type" => "connect", "modules" => [["moduleID" => "{C23F025F-A4CE-7F31-CE14-0AE225778FE7}"]]
+        ]);
     }
 
     public function ApplyChanges(): void {

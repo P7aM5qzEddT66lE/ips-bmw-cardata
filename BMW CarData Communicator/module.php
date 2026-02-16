@@ -49,7 +49,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
     }
 
     /**
-     * Using symcon data flow to provide an api call like function that is handling the Authorization and eror codes.
+     * Using symcon data flow to provide an api call like function that is handling the Authorization and error codes.
      *
      * @param string $JSONString        Requested api call configuration
      * @return string                   response
