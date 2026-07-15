@@ -8,6 +8,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         // property
         $this->RegisterPropertyString("clientId", null);
         $this->RegisterPropertyBoolean("Debug", false);
+        $this->RegisterPropertyInteger("RefreshMargin", 180);
 
         // init attributes
         $this->RegisterAttributeString("containerId", null);
@@ -57,8 +58,13 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
      */
     public function ForwardData(string $JSONString): string {
         // check if token is expired
-        if ($this->ReadAttributeString("refreshToken") != null
-            && $this->ReadAttributeInteger("carDataExpiresAt") <= time()) {
+        $refreshMargin = $this->ReadPropertyInteger("RefreshMargin");
+
+        if (
+            $this->ReadAttributeString("refreshToken") !== "" &&
+            $this->ReadAttributeInteger("carDataExpiresAt") <= (time() + $refreshMargin)
+        ) {
+            $this->Debug("Access token expires within {$refreshMargin} seconds. Refreshing.");
             $this->refreshToken();
         }
 
@@ -243,8 +249,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
      *
      * @return void
      */
-    private function refreshToken(): void
-    {
+    private function refreshToken(): void {
         $this->Debug('=== Refresh token started ===');
 
         $expiresAt = $this->ReadAttributeInteger("carDataExpiresAt");
@@ -886,8 +891,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
     *
     * @param string $message Message to log.
     */
-    private function Debug(string $message): void
-    {
+    private function Debug(string $message): void {
         if (!$this->ReadPropertyBoolean('Debug')) {
             return;
         }
