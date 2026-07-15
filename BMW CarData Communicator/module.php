@@ -56,75 +56,101 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
      * @param string $JSONString        Requested api call configuration
      * @return string                   response
      */
-    public function ForwardData(string $JSONString): string {
-        // check if token is expired
-        $refreshMargin = $this->ReadPropertyInteger("RefreshMargin");
+    public function ForwardData(string $JSONString): string
+{
+    // Refresh if token expires soon
+    $refreshMargin = $this->ReadPropertyInteger("RefreshMargin");
 
-        if (
-            $this->ReadAttributeString("refreshToken") !== "" &&
-            $this->ReadAttributeInteger("carDataExpiresAt") <= (time() + $refreshMargin)
-        ) {
-            $this->Debug("Access token expires within {$refreshMargin} seconds. Refreshing.");
-            $this->refreshToken();
-        }
-
-        // get data
-        $data = json_decode($JSONString, true);
-        $tokenType = $this->ReadAttributeString("tokenType");
-        $accessToken = $this->ReadAttributeString("accessToken");
-
-        // log
-        $this->Debug("Request: {$data['method']} {$data['endpoint']}");
-        
-        if (isset($data['query'])) {
-            $this->Debug('Query: ' . json_encode($data['query'], JSON_UNESCAPED_SLASHES));
-        }
-
-        if (isset($data['post'])) {
-            $this->Debug('POST: ' . json_encode($data['post'], JSON_UNESCAPED_SLASHES));
-        }
-
-        $headers = [
-           "Authorization: {$tokenType} {$accessToken}",
-            "Accept: {$data["accept"]}",
-            "x-version: v1"
-        ];
-
-        if ($data["method"] === "POST") {
-            $headers[] = "Content-Type: application/json";
-        }
-        $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
-
-        $ch = curl_init();
-        curl_setopt_array($ch, array(
-            CURLOPT_URL => "https://api-cardata.bmwgroup.com" . $data["endpoint"],
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CUSTOMREQUEST => $data["method"],
-            CURLOPT_POSTFIELDS => $data["body"],
-            CURLOPT_RETURNTRANSFER => true
-        ));
-        $response = curl_exec($ch);
-        $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $this->Debug("HTTP Status: {$statusCode}");
-
-        if ($response !== false) {
-            $this->Debug("Response: {$response}");
-        } else {
-            $this->Debug("cURL Error: " . curl_error($ch));
-        }
-        curl_close($ch);
-
-
-        // checking on errors
-        $this->SetStatus($statusCode == 200 ? 102 : $statusCode);
-
-        if (isset($data["image"])) {
-            $base64 = base64_encode($response);
-            return $base64;
-        }
-
-        return $response;
+    if (
+        $this->ReadAttributeString("refreshToken") !== "" &&
+        $this->ReadAttributeInteger("carDataExpiresAt") <= (time() + $refreshMargin)
+    ) {
+        $this->Debug("Access token expires within {$refreshMargin} seconds. Refreshing.");
+        $this->refreshToken();
     }
+
+    $data = json_decode($JSONString, true);
+
+    $result = $this->executeRequest($data);
+
+    // Retry once after refresh on Unauthorized
+    if ($result['status'] === 401) {
+
+        $this->Debug('HTTP 401 received. Trying token refresh.');
+
+        $this->refreshToken();
+
+        $result = $this->executeRequest($data);
+    }
+
+    $this->SetStatus($result['status'] == 200 ? 102 : $result['status']);
+
+    if (isset($data["image"])) {
+        return base64_encode($result['response']);
+    }
+
+    return $result['response'];
+}
+
+private function executeRequest(array $data): array
+{
+    $tokenType = $this->ReadAttributeString("tokenType");
+    $accessToken = $this->ReadAttributeString("accessToken");
+
+    $this->Debug("Request: {$data['method']} {$data['endpoint']}");
+
+    if (isset($data['query'])) {
+        $this->Debug('Query: ' . json_encode($data['query'], JSON_UNESCAPED_SLASHES));
+    }
+
+    if (isset($data['post'])) {
+        $this->Debug('POST: ' . json_encode($data['post'], JSON_UNESCAPED_SLASHES));
+    }
+
+    $headers = [
+        "Authorization: {$tokenType} {$accessToken}",
+        "Accept: {$data["accept"]}",
+        "x-version: v1"
+    ];
+
+    if ($data["method"] === "POST") {
+        $headers[] = "Content-Type: application/json";
+    }
+
+    $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
+
+    $ch = curl_init();
+
+    $options = [
+    CURLOPT_URL => "https://api-cardata.bmwgroup.com" . $data["endpoint"],
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_CUSTOMREQUEST => $data["method"],
+    CURLOPT_RETURNTRANSFER => true
+];
+
+if (!empty($data["body"])) {
+    $options[CURLOPT_POSTFIELDS] = $data["body"];
+}
+
+curl_setopt_array($ch, $options);
+
+    $response = curl_exec($ch);
+    $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    if ($response !== false) {
+        $this->Debug("HTTP Status: {$statusCode}");
+        $this->Debug("Response: {$response}");
+    } else {
+        $this->Debug("cURL Error: " . curl_error($ch));
+    }
+
+    curl_close($ch);
+
+    return [
+        'status'   => $statusCode,
+        'response' => $response
+    ];
+}
 
     /**
      * Follow BMW Device Code Flow to authorize module for user
