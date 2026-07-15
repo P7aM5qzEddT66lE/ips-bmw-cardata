@@ -802,20 +802,20 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
     }
 
     /**
-    * Write a debug message if debugging is enabled.
+    * Writes a debug message if debug logging is enabled.
     *
-    * @param string $message
-    * @return void
+    * @param string $message Message to log.
     */
     private function Debug(string $message): void
-        {
+    {
         if (!$this->ReadPropertyBoolean('Debug')) {
             return;
         }
 
-        IPS_LogMessage('BMWCarData', $message);
+        IPS_LogMessage(
+            'BMWCarData',
+            sprintf('[%d] %s', $this->InstanceID, $message)
+        );
     }
-
-
 
 }
