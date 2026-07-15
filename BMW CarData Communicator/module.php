@@ -69,6 +69,15 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
 
         // log
         $this->Debug("Request: {$data['method']} {$data['endpoint']}");
+        $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
+
+        if (isset($data['query'])) {
+            $this->Debug('Query: ' . json_encode($data['query'], JSON_UNESCAPED_SLASHES));
+        }
+
+        if (isset($data['post'])) {
+            $this->Debug('POST: ' . json_encode($data['post'], JSON_UNESCAPED_SLASHES));
+        }
 
         $headers = [
             "Authorization: " . $tokenType . " " . $accessToken,
@@ -87,6 +96,13 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         ));
         $response = curl_exec($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $this->Debug("HTTP Status: {$statusCode}");
+
+        if ($response !== false) {
+            $this->Debug("Response: {$response}");
+        } else {
+            $this->Debug("cURL Error: " . curl_error($ch));
+        }
         curl_close($ch);
 
         // checking on errors
