@@ -105,6 +105,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         }
         curl_close($ch);
 
+        
         // checking on errors
         $this->SetStatus($statusCode == 200 ? 102 : $statusCode);
 
