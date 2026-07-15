@@ -240,37 +240,97 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
      *
      * @return void
      */
-    private function refreshToken(): void {
+    private function refreshToken(): void
+    {
+        $this->Debug('=== Refresh token started ===');
+
+        $expiresAt = $this->ReadAttributeInteger("carDataExpiresAt");
+        $remaining = $expiresAt - time();
+
+        $this->Debug('Current time: ' . time());
+        $this->Debug('Current expiresAt: ' . $expiresAt);
+        $this->Debug('Remaining lifetime: ' . $remaining . ' seconds');
+
         $headers = [
             "Content-Type: application/x-www-form-urlencoded",
             "Accept: application/json"
         ];
 
-        $params = [
-            "client_id" => $this->ReadPropertyString("clientId"),
-            "grant_type" => "refresh_token",
+        $params = http_build_query([
+            "client_id"     => $this->ReadPropertyString("clientId"),
+            "grant_type"    => "refresh_token",
             "refresh_token" => $this->ReadAttributeString("refreshToken")
-        ];
-        $params = http_build_query($params);
-
-        $curlOptions = array(
-            CURLOPT_URL => "https://customer.bmwgroup.com/gcdm/oauth/token",
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $params,
-            CURLOPT_TIMEOUT => 10,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_RETURNTRANSFER => true
-        );
+        ]);
 
         $ch = curl_init();
-        curl_setopt_array($ch, $curlOptions);
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => "https://customer.bmwgroup.com/gcdm/oauth/token",
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $params,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
         $response = curl_exec($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+
         curl_close($ch);
+
+        $this->Debug('Refresh HTTP Status: ' . $statusCode);
+
+        if ($response === false) {
+            $this->Debug('cURL Error: ' . $curlError);
+            $this->SetStatus(500);
+            return;
+        }
+
+        $this->Debug('Refresh Response: ' . $response);
+
         $query = json_decode($response, true);
 
-        $this->SetStatus($statusCode == 200 ? 102 : $statusCode);
+        if (!is_array($query)) {
+            $this->Debug('Invalid JSON response.');
+            $this->SetStatus($statusCode);
+            return;
+        }
+
+        if ($statusCode !== 200) {
+            if (isset($query['error'])) {
+                $this->Debug('BMW Error: ' . $query['error']);
+            }
+
+            if (isset($query['error_description'])) {
+                $this->Debug('BMW Error Description: ' . $query['error_description']);
+            }
+
+            $this->SetStatus($statusCode);
+            return;
+        }
+
+        $required = [
+            "gcid",
+            "token_type",
+            "access_token",
+            "refresh_token",
+            "scope",
+            "id_token",
+            "expires_in"
+        ];
+
+        foreach ($required as $field) {
+            if (!array_key_exists($field, $query)) {
+                $this->Debug('Missing response field: ' . $field);
+                $this->SetStatus(500);
+                return;
+            }
+        }
+
+        $this->Debug('Access token valid for ' . $query['expires_in'] . ' seconds.');
+        $this->Debug('Refresh token successfully updated.');
 
         $this->WriteAttributeString("gcid", $query["gcid"]);
         $this->WriteAttributeString("tokenType", $query["token_type"]);
@@ -278,14 +338,14 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         $this->WriteAttributeString("refreshToken", $query["refresh_token"]);
         $this->WriteAttributeString("scope", $query["scope"]);
         $this->WriteAttributeString("idToken", $query["id_token"]);
-        $this->WriteAttributeInteger("carDataExpiresAt", time() + $query["expires_in"]);
+        $this->WriteAttributeInteger("carDataExpiresAt", time() + (int)$query["expires_in"]);
+
+        $this->SetStatus(102);
+
+        $this->Debug('=== Refresh token finished ===');
     }
 
-    /**
-     * Configure ips-bmw-cardata container the get vehicle telematic data later on.
-     *
-     * @return void
-     */
+    
     private function getContainer(): void {
         // check for existing telematic container because of limitation
         $response = json_decode($this->ForwardData(json_encode([
