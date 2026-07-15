@@ -7,6 +7,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
 
         // property
         $this->RegisterPropertyString("clientId", null);
+        $this->RegisterPropertyBoolean("Debug", false);
 
         // init attributes
         $this->RegisterAttributeString("containerId", null);
@@ -67,7 +68,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         $accessToken = $this->ReadAttributeString("accessToken");
 
         // log
-        IPS_LogMessage("BMWCommunicator", "request " . $data["endpoint"]);
+        $this->Debug("Request: {$data['method']} {$data['endpoint']}");
 
         $headers = [
             "Authorization: " . $tokenType . " " . $accessToken,
@@ -794,4 +795,22 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
             ]
         ]);
     }
+
+    /**
+    * Write a debug message if debugging is enabled.
+    *
+    * @param string $message
+    * @return void
+    */
+    private function Debug(string $message): void
+        {
+        if (!$this->ReadPropertyBoolean('Debug')) {
+            return;
+        }
+
+        IPS_LogMessage('BMWCarData', $message);
+    }
+
+
+
 }
