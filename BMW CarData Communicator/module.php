@@ -664,6 +664,11 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
                     "caption" => "➡️ How to connect your MyBMW Vehicle.",
                     "items" => [
                         [
+                           "type" => "CheckBox",
+                            "name" => "Debug",
+                            "caption" => "Enable debug logging"
+                        ],    
+                        [
                             "type" => "Label",
                             "caption" => '1. Create a BMW CarData Client',
                             "bold" => true
