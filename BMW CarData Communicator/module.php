@@ -69,8 +69,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
 
         // log
         $this->Debug("Request: {$data['method']} {$data['endpoint']}");
-        $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
-
+        
         if (isset($data['query'])) {
             $this->Debug('Query: ' . json_encode($data['query'], JSON_UNESCAPED_SLASHES));
         }
@@ -85,6 +84,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
             $data["method"] == "POST" ? "Content-Type: application/json" : null,
             "x-version: v1"
         ];
+        $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
 
         $ch = curl_init();
         curl_setopt_array($ch, array(
@@ -105,7 +105,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         }
         curl_close($ch);
 
-        
+
         // checking on errors
         $this->SetStatus($statusCode == 200 ? 102 : $statusCode);
 
