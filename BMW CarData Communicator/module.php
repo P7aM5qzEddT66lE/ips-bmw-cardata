@@ -79,11 +79,14 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         }
 
         $headers = [
-            "Authorization: " . $tokenType . " " . $accessToken,
+           "Authorization: {$tokenType} {$accessToken}",
             "Accept: {$data["accept"]}",
-            $data["method"] == "POST" ? "Content-Type: application/json" : null,
             "x-version: v1"
         ];
+
+        if ($data["method"] === "POST") {
+            $headers[] = "Content-Type: application/json";
+        }
         $this->Debug('Headers: ' . json_encode($headers, JSON_UNESCAPED_SLASHES));
 
         $ch = curl_init();
@@ -345,7 +348,7 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         $this->Debug('=== Refresh token finished ===');
     }
 
-    
+
     private function getContainer(): void {
         // check for existing telematic container because of limitation
         $response = json_decode($this->ForwardData(json_encode([
