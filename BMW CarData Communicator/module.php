@@ -660,14 +660,14 @@ class BMWCarDataCommunicator extends IPSModuleStrict {
         return json_encode([
             "elements" => [
                 [
+                    "type" => "CheckBox",
+                    "name" => "Debug",
+                    "caption" => "Enable debug logging"
+                ],    
+                [
                     "type" => "ExpansionPanel",
                     "caption" => "➡️ How to connect your MyBMW Vehicle.",
                     "items" => [
-                        [
-                           "type" => "CheckBox",
-                            "name" => "Debug",
-                            "caption" => "Enable debug logging"
-                        ],    
                         [
                             "type" => "Label",
                             "caption" => '1. Create a BMW CarData Client',
